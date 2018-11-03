@@ -114,7 +114,7 @@ func (p *InfinityProtocol) handleFrame(frame *InfinityFrame) *InfinityFrame {
 	log.Printf("read frame: %s", frame)
 
 	switch frame.op {
-	case opRESPONSE:
+	case ACK06:
 		if frame.dst == devSAM {
 			p.responseCh <- frame
 		}
@@ -126,7 +126,7 @@ func (p *InfinityProtocol) handleFrame(frame *InfinityFrame) *InfinityFrame {
 				}
 			}
 		}
-	case opWRITE:
+	case WRITE_TABLE_BLOCK:
 		if frame.src == devTSTAT && frame.dst == devSAM {
 			return writeAck
 		}
@@ -218,7 +218,7 @@ func (p *InfinityProtocol) performAction(action *Action) {
 			reqTable := action.requestFrame.data[0:3]
 			resTable := res.data[0:3]
 
-			if action.requestFrame.op == opREAD && !bytes.Equal(reqTable, resTable) {
+			if action.requestFrame.op == READ_TABLE_BLOCK && !bytes.Equal(reqTable, resTable) {
 				log.Printf("got response for incorrect table, is: %x expected: %x", resTable, reqTable)
 				continue
 			}
@@ -248,7 +248,7 @@ func (p *InfinityProtocol) send(dst uint16, op uint8, requestData []byte, respon
 	// Wait for response
 	ok := <-act.ch
 
-	if ok && op == opREAD && act.responseFrame != nil && act.responseFrame.data != nil && len(act.responseFrame.data) > 6 {
+	if ok && op == READ_TABLE_BLOCK && act.responseFrame != nil && act.responseFrame.data != nil && len(act.responseFrame.data) > 6 {
 		// Shouldn't a failure of any of the above tests return false from send?
 		// As written the function would return true if a successful response even if there were other problems
 		// Or am I missing some important point?
@@ -287,7 +287,7 @@ func (p *InfinityProtocol) Write(dst uint16, table []byte, addr []byte, params i
 	buf.Write(addr[:])
 	binary.Write(buf, binary.BigEndian, params)
 
-	return p.send(dst, opWRITE, buf.Bytes(), nil)
+	return p.send(dst, WRITE_TABLE_BLOCK, buf.Bytes(), nil)
 }
 
 func (p *InfinityProtocol) WriteTable(dst uint16, table InfinityTable, flags uint8) bool {
@@ -297,12 +297,12 @@ func (p *InfinityProtocol) WriteTable(dst uint16, table InfinityTable, flags uin
 }
 
 func (p *InfinityProtocol) Read(dst uint16, addr InfinityTableAddr, params interface{}) bool {
-	return p.send(dst, opREAD, addr[:], params)
+	return p.send(dst, READ_TABLE_BLOCK, addr[:], params)
 }
 
 func (p *InfinityProtocol) ReadTable(dst uint16, table InfinityTable) bool {
 	addr := table.addr()
-	return p.send(dst, opREAD, addr[:], table)
+	return p.send(dst, READ_TABLE_BLOCK, addr[:], table)
 }
 
 func (p *InfinityProtocol) sendFrame(buf []byte) bool {
